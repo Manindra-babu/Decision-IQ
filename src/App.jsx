@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import PathCanvas from './components/PathCanvas';
 import {
 BrainCircuit,
 Map,
@@ -53,7 +54,6 @@ Check,
 ArrowDown,
 Trash2,
 ExternalLink,
-Github,
 Code2,
 Globe,
 Moon,
@@ -623,10 +623,10 @@ return (
                 className={`px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all
                 shadow-sm ${
                 activeGoalId === key
-                ? 'bg-gradient-to-r from-[var(--c-primary)] to-[var(--c-secondary)] text-white border-transparent
-                shadow-md'
-                : 'bg-white dark:bg-slate-800 text-slate-500 hover:text-[var(--c-primary)] border border-slate-200
-                dark:border-slate-700 hover:border-[var(--c-primary)]'
+                ? `bg-gradient-to-r from-[var(--c-primary)] to-[var(--c-secondary)] text-white border-transparent
+                shadow-md`
+                : `bg-white dark:bg-slate-800 text-slate-500 hover:text-[var(--c-primary)] border border-slate-200
+                dark:border-slate-700 hover:border-[var(--c-primary)]`
                 }`}
                 >
                 {TITLE_MAP[key]}
@@ -678,10 +678,10 @@ return (
                                 className={`w-full sm:w-auto px-5 py-2.5 rounded-sm font-bold text-[10px] uppercase
                                 tracking-widest transition-all flex items-center justify-center space-x-2 ${
                                 n.status === 'completed'
-                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20
-                                dark:border-emerald-800 hover:bg-emerald-100'
-                                : 'bg-slate-900 dark:bg-blue-600 text-white shadow-sm hover:-translate-y-0.5
-                                hover:shadow-md'
+                                ? `bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20
+                                dark:border-emerald-800 hover:bg-emerald-100`
+                                : `bg-slate-900 dark:bg-blue-600 text-white shadow-sm hover:-translate-y-0.5
+                                hover:shadow-md`
                                 }`}
                                 >
                                 {n.status === 'completed' ?
@@ -762,7 +762,7 @@ year: "2026",
 goal: "AI Engineer",
 codingProfiles: [
 { platform: "GitHub", handle: "@alexj_dev", icon:
-<Github size={16} />, status: "Verified" },
+<Code2 size={16} />, status: "Verified" },
 { platform: "LeetCode", handle: "alex_codes_26", icon:
 <Code2 size={16} />, status: "Verified" },
 { platform: "Codeforces", handle: "alex_j", icon:
@@ -951,7 +951,7 @@ return (
                     <Terminal size={18} className="mr-2 text-emerald-500" /> Connect Platforms
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <ConnectRow icon={<Github size={20} />} label="GitHub" status="Connected" />
+                    <ConnectRow icon={<Code2 size={20} />} label="GitHub" status="Connected" />
                     <ConnectRow icon={<Code2 size={20} />} label="LeetCode" status="Connected" />
                     <ConnectRow icon={<Terminal size={20} />} label="HackerRank" status="Disconnected" />
                 </div>
@@ -1263,8 +1263,8 @@ return (
                         <h2
                             className="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-2 uppercase tracking-tighter">
                             {isLogin ? 'Welcome Back' : otpSent ? 'Verify Identity' : 'Get Started'}</h2>
-                        <p className="text-slate-500 font-semibold text-xs sm:text-sm mt-1 px-4">{isLogin ? 'Enter your
-                            credentials to access the engine.' : otpSent ? 'We sent a 6-digit code to your email.' :
+                        <p className="text-slate-500 font-semibold text-xs sm:text-sm mt-1 px-4">{isLogin ? `Enter your
+                            credentials to access the engine.` : otpSent ? 'We sent a 6-digit code to your email.' :
                             'Register to start engineering your career path today.'}</p>
                     </div>
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -1343,8 +1343,7 @@ return (
                                 "Already registered? "}</span>
                             <button type="button" onClick={()=> handleToggle(!isLogin)} disabled={isProcessing}
                                 className="text-[var(--c-primary)] hover:text-slate-900 font-black uppercase
-                                tracking-wider text-xs ml-1 disabled:opacity-50">{isLogin ? 'Sign up' : 'Sign
-                                in'}</button>
+                                tracking-wider text-xs ml-1 disabled:opacity-50">{isLogin ? 'Sign up' : 'Sign in'}</button>
                         </div>
                         <button type="submit" disabled={isProcessing}
                             className="w-full mt-4 flex items-center justify-center space-x-3 bg-slate-900 hover:bg-slate-800 text-white pl-8 pr-2 py-3 rounded-sm font-bold text-xs uppercase tracking-wider transition-all shadow-md group disabled:opacity-70">
@@ -1387,8 +1386,8 @@ function FloatingChatbot() {
 const [isOpen, setIsOpen] = useState(false);
 const [messages, setMessages] = useState([{
 role: 'assistant',
-content: "Hi Alex! I'm your career navigator. I've analyzed your B.Tech CSE profile. How can I help you engineering your
-roadmap today?"
+content: `Hi Alex! I'm your career navigator. I've analyzed your B.Tech CSE profile. How can I help you engineering your
+roadmap today?`
 }]);
 const [input, setInput] = useState('');
 const [isTyping, setIsTyping] = useState(false);
@@ -1408,18 +1407,18 @@ setIsTyping(true);
 // AI logic simulation based on user prompts
 setTimeout(() => {
 setIsTyping(false);
-let response = "That's a great question! For a detailed breakdown, check our Path Explorer or the AI Recommendation
-engine in the Goal Overview.";
+let response = `That's a great question! For a detailed breakdown, check our Path Explorer or the AI Recommendation
+engine in the Goal Overview.`;
 
 if (userMsg.includes("DSA before ML")) {
-response = "DSA builds the logic required to understand ML algorithms under the hood. Most ML frameworks use data
-structures for optimization!";
+response = `DSA builds the logic required to understand ML algorithms under the hood. Most ML frameworks use data
+structures for optimization!`;
 } else if (userMsg.includes("projects")) {
-response = "For an AI Engineer, I suggest building a RAG (Retrieval-Augmented Generation) pipeline using Python and a
-vector database like Pinecone.";
+response = `For an AI Engineer, I suggest building a RAG (Retrieval-Augmented Generation) pipeline using Python and a
+vector database like Pinecone.`;
 } else if (userMsg.includes("missing")) {
-response = "Based on your CSE branch, you should focus on PyTorch and MLOps deployment to complete your current AI
-Engineer goal.";
+response = `Based on your CSE branch, you should focus on PyTorch and MLOps deployment to complete your current AI
+Engineer goal.`;
 }
 
 setMessages(prev => [...prev, { role: 'assistant', content: response }]);
@@ -1533,6 +1532,7 @@ function DecisionAnalyzer({ navigate, setActiveGoalId }) {
 const [startPoint, setStartPoint] = useState('B.Tech CSE');
 const [endPoint, setEndPoint] = useState('AI Engineer');
 const [isGenerating, setIsGenerating] = useState(false);
+const [error, setError] = useState(null);
 const [treeData, setTreeData] = useState(null);
 
 // Tracks the sequence of nodes the user has selected to reach the goal
@@ -1541,93 +1541,35 @@ const [selectedSequence, setSelectedSequence] = useState([]);
 // =====================================================================
 // API INTEGRATION SECTION: Fetch Hierarchical Paths (Replace Later)
 // =====================================================================
-const fetchPathsFromAPI = async (start, goal) => {
-// TODO: Add your actual API Fetch logic here when the backend is ready.
-// Example implementation:
-/*
-try {
-const response = await
-fetch(`https://api.yourdomain.com/generate-paths?start=${encodeURIComponent(start)}&goal=${encodeURIComponent(goal)}`);
-const data = await response.json();
-return data.tree; // Ensure it returns the nested children structure below
-} catch (error) {
-console.error("Failed to fetch path tree:", error);
-return null;
-}
-*/
-
-// SIMULATED MOCK API RESPONSE (Tree Structure)
-return new Promise(resolve => {
-setTimeout(() => {
-resolve({
-id: 'root',
-title: start,
-type: 'start',
-children: [
-{
-id: 'branch_data',
-title: 'Data & Algorithm Track',
-type: 'branch',
-children: [
-{
-id: 'skill_ml',
-title: 'Machine Learning Fundamentals',
-type: 'skill',
-children: [
-{
-id: 'skill_dl',
-title: 'Deep Learning & Neural Nets',
-type: 'skill',
-children: [{ id: 'goal_ai_1', title: goal, type: 'goal', isGoal: true }]
-},
-{
-id: 'skill_nlp',
-title: 'Natural Language Processing',
-type: 'skill',
-children: [{ id: 'goal_ai_2', title: goal, type: 'goal', isGoal: true }]
-}
-]
-}
-]
-},
-{
-id: 'branch_swe',
-title: 'Software Engineering Track',
-type: 'branch',
-children: [
-{
-id: 'skill_backend',
-title: 'Python Backend & APIs',
-type: 'skill',
-children: [
-{
-id: 'skill_mlops',
-title: 'MLOps & Deployment',
-type: 'skill',
-children: [{ id: 'goal_ai_3', title: goal, type: 'goal', isGoal: true }]
-}
-]
-}
-]
-}
-]
-});
-}, 1500);
-});
-};
-
 const handleGenerate = async () => {
 if (!startPoint || !endPoint) return;
 setIsGenerating(true);
+setError(null);
 setTreeData(null);
 setSelectedSequence([]);
 
-// Fetch the hierarchical path tree
-const generatedTree = await fetchPathsFromAPI(startPoint, endPoint);
+try {
+const response = await fetch("http://localhost:8000/api/generate-paths", {
+method: "POST",
+headers: { "Content-Type": "application/json" },
+body: JSON.stringify({ start: startPoint, goal: endPoint })
+});
 
-setTreeData(generatedTree);
-setSelectedSequence([generatedTree]); // Root node is the first sequence item
+if (!response.ok) throw new Error("Failed to generate path. Gemma might be overloaded.");
+
+const data = await response.json();
+if (data.tree) {
+setTreeData(data.tree);
+setSelectedSequence([data.tree]);
+} else {
+throw new Error("Invalid response from AI compass.");
+}
+} catch (err) {
+console.error("Failed to fetch path tree:", err);
+setError("The compass is spinning! Could not map this career path. Try again.");
+} finally {
 setIsGenerating(false);
+}
 };
 
 const handleSelectNode = (levelIndex, selectedNode) => {
@@ -1647,7 +1589,14 @@ navigate('career-roadmap');
 
 return (
 <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-12 relative z-10 animate-fade-in-up pb-20">
-    <div className="text-center mb-10">
+    <div className="text-center mb-10 relative">
+        {/* Error Message */}
+        {error && (
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[120%] z-20 text-[#ff4444] bg-[rgba(255,0,0,0.1)] p-4 rounded-md border border-[#ff4444] shadow-[0_0_15px_rgba(255,0,0,0.2)] w-full max-w-md animate-pop-in">
+                <span className="font-bold text-sm tracking-widest uppercase">{error}</span>
+            </div>
+        )}
+        
         <div
             className="inline-flex items-center justify-center p-4 bg-slate-900 dark:bg-blue-600 rounded-sm mb-6 shadow-lg">
             <GitCompare size={32} className="text-white" />
@@ -1692,82 +1641,31 @@ return (
 
         <div className="mt-8 flex justify-center">
             <button onClick={handleGenerate} disabled={isGenerating || !startPoint || !endPoint}
-                className="bg-slate-900 dark:bg-blue-600 text-white px-10 py-3.5 rounded-sm font-bold text-xs uppercase tracking-widest flex items-center space-x-3 shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:hover:translate-y-0">
+                className="bg-slate-900 dark:bg-blue-600 text-white px-10 py-3.5 rounded-sm font-bold text-xs uppercase tracking-widest flex items-center space-x-3 shadow-[0_0_15px_rgba(0,255,255,0.3)] hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(0,255,255,0.5)] transition-all disabled:opacity-70 disabled:hover:translate-y-0 border border-cyan-500/50">
                 {isGenerating ?
-                <Loader2 size={16} className="animate-spin" /> :
-                <GitCompare size={16} />}
-                <span>{isGenerating ? 'Mapping Routes...' : 'Generate Paths'}</span>
+                <Loader2 size={16} className="animate-spin text-[#0ff]" /> :
+                <GitCompare size={16} className="text-[#0ff]" />}
+                <span className={isGenerating ? "text-[#0ff]" : "text-white"}>{isGenerating ? 'Plotting Course...' : 'Generate Grand Line'}</span>
             </button>
         </div>
+        
+        {/* Futuristic Loading Overlay */}
+        {isGenerating && (
+            <div className="absolute top-[150%] left-1/2 -translate-x-1/2 z-20 text-[#0ff] text-center font-mono animate-pulse-slow">
+                <h2 className="text-xl font-black uppercase tracking-widest mb-2 shadow-cyan-500/50 drop-shadow-md">Navigating the Data...</h2>
+                <p className="text-xs opacity-80 uppercase tracking-widest">Gemma 3 is generating the optimal path.</p>
+            </div>
+        )}
     </div>
 
-    {/* Hierarchical Path Selection UI (Cascade Columns) */}
+    {/* Visual Path Mapping UI (DAG Layout) */}
     {treeData && (
-    <div className="animate-fade-in-up">
-        <h3
-            className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white mb-6 flex items-center border-b dark:border-slate-800 pb-3">
-            <Layers size={16} className="mr-2 text-[var(--c-primary)]" /> Select Your Path Trajectory
-        </h3>
-
-        <div
-            className="flex space-x-4 overflow-x-auto pb-6 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700">
-            {selectedSequence.map((parentNode, index) => {
-
-            // If the current sequence node is the final goal, render a success card instead of a column of children
-            if (parentNode.isGoal) {
-            return (
-            <div key={`goal-${index}`}
-                className="min-w-[280px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-6 rounded-sm text-white shadow-xl flex flex-col justify-center items-center text-center animate-pop-in">
-                <CheckCircle2 size={40} className="mb-4 opacity-80" />
-                <h4 className="text-xl font-black tracking-tight mb-2 uppercase">{parentNode.title}</h4>
-                <p className="text-[10px] font-bold tracking-widest uppercase opacity-80 mb-6">Destination Reached</p>
-                <button onClick={handleSavePath}
-                    className="w-full bg-white text-emerald-700 py-3 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:shadow-lg transition-all">
-                    Export to Roadmap
-                </button>
-            </div>
-            );
-            }
-
-            const options = parentNode.children || [];
-            const selectedChildId = selectedSequence[index + 1]?.id;
-
-            return (
-            <div key={parentNode.id}
-                className="min-w-[260px] bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-sm flex flex-col shadow-sm animate-fade-in-up">
-                <div
-                    className="p-3 bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-center">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Step {index + 1}
-                        Selection</span>
-                </div>
-                <div className="flex-1 p-3 space-y-2 max-h-[300px] overflow-y-auto">
-                    {options.map(opt => {
-                    const isSelected = opt.id === selectedChildId;
-                    return (
-                    <button key={opt.id} onClick={()=> handleSelectNode(index + 1, opt)}
-                        className={`w-full text-left p-4 rounded-sm border transition-all flex flex-col group ${
-                        isSelected
-                        ? 'bg-[rgba(var(--c-primary-rgb),0.05)] border-[var(--c-primary)] shadow-sm'
-                        : 'bg-white dark:bg-slate-800 border-transparent hover:border-slate-300
-                        dark:hover:border-slate-600'
-                        }`}
-                        >
-                        <span className={`text-[10px] font-black uppercase mb-1 ${isSelected ? 'text-[var(--c-primary)]'
-                            : 'text-slate-400 group-hover:text-slate-500' }`}>
-                            {opt.type === 'goal' ? 'Target Reached' : opt.type === 'branch' ? 'Track' : 'Skill Module'}
-                        </span>
-                        <span className={`text-sm font-bold ${isSelected
-                            ? 'text-[var(--c-primary-dark)] dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'
-                            }`}>
-                            {opt.title}
-                        </span>
-                    </button>
-                    );
-                    })}
-                </div>
-            </div>
-            );
-            })}
+    <div className="animate-fade-in-up mt-10">
+        <div className="mb-4">
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white mb-6 flex items-center">
+                <Map size={16} className="mr-2 text-[var(--c-primary)]" /> Visual Path Mapping
+            </h3>
+            <PathCanvas treeData={treeData} />
         </div>
     </div>
     )}

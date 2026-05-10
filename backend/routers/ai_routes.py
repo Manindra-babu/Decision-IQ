@@ -64,6 +64,14 @@ def transform_to_tree(start: str, goal: str, llm_data: dict) -> dict:
         
     return tree
 
+def clean_llm_output(raw_text: str) -> str:
+    """
+    Strips markdown code blocks (e.g., ```json) from the LLM output 
+    to ensure it can be safely parsed as JSON.
+    """
+    clean_text = raw_text.replace("```json", "").replace("```", "")
+    return clean_text.strip()
+
 # --- Routes ---
 
 @router.post("/generate-paths")
@@ -76,73 +84,62 @@ async def generate_paths(request: PathRequest):
     # -------------------------------------------------------------
     # IMPORTANT: The prompt strictly dictates the JSON output format
     # -------------------------------------------------------------
-    system_prompt = f"""You are an expert career counselor. The user is at '{request.start}' and wants to reach the career goal: '{request.goal}'. 
-You must generate a hierarchical learning path outlining the possible ways to achieve this goal and what to study in order.
+    system_prompt = f"""You are an expert career architect. The user will provide a target role.
+You must generate a highly detailed, multi-branching career roadmap in STRICT JSON format. 
 
-You MUST respond ONLY in valid JSON format using the following schema. Do not include markdown formatting or conversational text.
+The roadmap MUST include:
+1. Multiple distinct starting paths (e.g., Math-first, Code-first).
+2. Deep specialization tracks.
+3. Points where different paths converge into core skills.
 
-Schema:
+Constraint: Do not generate a simple line. You must generate at least 15 nodes. You must include foundational nodes that merge into a central "Core" node, which then branches out again into at least two distinct professional specializations (e.g., "Industry ML" vs "Research Lab").
+
+Use this exact JSON schema:
 {{
   "role": "{request.goal}",
-  "paths": [
+  "nodes": [
     {{
-      "path_name": "Name of the approach (e.g., The Math-Heavy Route)",
-      "steps": [
-        {{
-          "order": 1,
-          "topic": "Core Subject",
-          "details": "Brief description of what to learn."
-        }}
-      ]
+      "id": "unique_string_id",
+      "label": "<Main Topic Name>",
+      "description": "<Specific skills (e.g., NumPy, Pandas)>",
+      "track": "<Which branch this belongs to (e.g., Foundations, MLOps, Research)>",
+      "depends_on": ["<id_of_prerequisite_node>"]
     }}
   ]
 }}"""
 
-    # --- GEMMA 3 API INTEGRATION (PLACEHOLDER) ---
-    # Replace this block with your actual Gemma 3 HTTP request
-    if gemma_api_key and gemma_api_key != "your_gemma_3_api_key_here":
-        try:
-            # Example API Call structure:
-            # async with httpx.AsyncClient() as client:
-            #     response = await client.post(
-            #         "https://api.example.com/gemma-3/generate",
-            #         headers={"Authorization": f"Bearer {gemma_api_key}"},
-            #         json={"messages": [{"role": "system", "content": system_prompt}]}
-            #     )
-            #     data = response.json()
-            #     llm_json = json.loads(data['choices'][0]['message']['content'])
-            pass
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+    # --- OLLAMA API INTEGRATION (Direct IPv4) ---
+    ollama_ip = "10.239.16.36"  # Using the direct network address
+    ollama_url = f"http://{ollama_ip}:11434/api/generate"
+    ollama_model = "gemma3:270m"
     
-    # --- MOCK RESPONSE FOR TESTING ---
-    # Since the API is a placeholder, we use a mock JSON that matches the required schema
-    mock_llm_response = {
-        "role": request.goal,
-        "paths": [
-            {
-                "path_name": "Data Science to AI",
-                "steps": [
-                    { "order": 1, "topic": "Python & SQL", "details": "Master core programming and data querying." },
-                    { "order": 2, "topic": "Statistics & Probability", "details": "Understand distributions." },
-                    { "order": 3, "topic": "Machine Learning Algorithms", "details": "Scikit-learn, regressions." }
-                ]
-            },
-            {
-                "path_name": "Software Engineering to AI",
-                "steps": [
-                    { "order": 1, "topic": "Backend Development", "details": "Node.js, Python FastAPI." },
-                    { "order": 2, "topic": "MLOps & Deployment", "details": "Docker, AWS SageMaker." },
-                    { "order": 3, "topic": "LLM Integration", "details": "LangChain, RAG architectures." }
-                ]
-            }
-        ]
-    }
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                ollama_url,
+                json={
+                    "model": ollama_model,
+                    "prompt": system_prompt + f"\n\nUser's starting point: {request.start}\nTarget goal: {request.goal}",
+                    "stream": False,
+                    "format": "json"
+                },
+                timeout=60.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Ollama returns the generated response in the "response" field
+            llm_response_text = data.get("response", "{}")
+            cleaned_text = clean_llm_output(llm_response_text)
+            llm_json = json.loads(cleaned_text)
+            
+    except Exception as e:
+        print(f"Ollama API Error: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail=f"AI Server at {ollama_ip} is currently unreachable. Make sure Ollama is running on the other PC.")
     
-    # Transform the LLM's JSON into the hierarchical tree format required by the UI
-    tree_data = transform_to_tree(request.start, request.goal, mock_llm_response)
-    
-    return {"tree": tree_data}
+    # Return the DAG nodes directly to the React frontend
+    return {"tree": llm_json}
 
 
 @router.post("/assistant")
@@ -159,3 +156,35 @@ async def ai_assistant(request: ChatRequest):
     return {
         "reply": f"This is a placeholder reply from your Custom LLM. I received: {request.message}"
     }
+
+@router.get("/test-ai")
+async def test_ai_connection():
+    """
+    A ping test to verify the backend can successfully talk to the AI Server PC.
+    """
+    ollama_ip = os.getenv("OLLAMA_IP", "10.239.16.36")
+    ollama_url = f"http://{ollama_ip}:11434/api/generate"
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                ollama_url,
+                json={
+                    "model": os.getenv("OLLAMA_MODEL", "gemma3:270m"),
+                    "prompt": "Say 'Connection Successful!' in JSON format: {\"status\": \"Connection Successful!\"}",
+                    "stream": False,
+                    "format": "json"
+                },
+                timeout=15.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Clean and parse
+            raw_text = data.get("response", "{}")
+            cleaned_text = clean_llm_output(raw_text)
+            parsed_json = json.loads(cleaned_text)
+            
+            return {"message": "Success!", "aiResponse": parsed_json}
+    except Exception as e:
+        return {"message": "Connection failed", "error": str(e)}
