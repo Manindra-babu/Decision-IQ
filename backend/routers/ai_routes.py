@@ -73,7 +73,20 @@ def clean_llm_output(raw_text: str) -> str:
     return clean_text.strip()
 
 # --- Routes ---
+# Temporary in-memory storage
+saved_roadmaps = []
 
+@router.post("/save-roadmap")
+async def save_roadmap(roadmap: dict):
+
+    saved_roadmaps.append(roadmap)
+
+    return {
+        "message": "Roadmap saved successfully"
+    }
+@router.get("/saved-roadmaps")
+async def get_saved_roadmaps():
+    return saved_roadmaps
 @router.post("/generate-paths")
 async def generate_paths(request: PathRequest):
     """
@@ -84,34 +97,45 @@ async def generate_paths(request: PathRequest):
     # -------------------------------------------------------------
     # IMPORTANT: The prompt strictly dictates the JSON output format
     # -------------------------------------------------------------
-    system_prompt = f"""You are an expert career architect. The user will provide a target role.
-You must generate a highly detailed, multi-branching career roadmap in STRICT JSON format. 
+    system_prompt = f"""
+You are an expert career roadmap architect.
 
-The roadmap MUST include:
-1. Multiple distinct starting paths (e.g., Math-first, Code-first).
-2. Deep specialization tracks.
-3. Points where different paths converge into core skills.
+Generate a structured learning roadmap in STRICT JSON format.
 
-Constraint: Do not generate a simple line. You must generate at least 15 nodes. You must include foundational nodes that merge into a central "Core" node, which then branches out again into at least two distinct professional specializations (e.g., "Industry ML" vs "Research Lab").
+Rules:
+1. Organize the roadmap into stages.
+2. Each stage must contain multiple topics.
+3. Each topic can contain subtopics.
+4. Keep the roadmap beginner-friendly and visually organized.
+5. Do NOT generate graph nodes or dependency structures.
+6. Return ONLY valid JSON.
 
-Use this exact JSON schema:
+Use this exact schema:
+
 {{
   "role": "{request.goal}",
-  "nodes": [
+  "stages": [
     {{
-      "id": "unique_string_id",
-      "label": "<Main Topic Name>",
-      "description": "<Specific skills (e.g., NumPy, Pandas)>",
-      "track": "<Which branch this belongs to (e.g., Foundations, MLOps, Research)>",
-      "depends_on": ["<id_of_prerequisite_node>"]
+      "title": "Stage Name",
+      "topics": [
+        {{
+          "name": "Topic Name",
+          "description": "Short explanation",
+          "subtopics": [
+            "Subtopic 1",
+            "Subtopic 2"
+          ]
+        }}
+      ]
     }}
   ]
-}}"""
+}}
+"""
 
     # --- OLLAMA API INTEGRATION (Direct IPv4) ---
-    ollama_ip = "10.239.16.36"  # Using the direct network address
+    ollama_ip = os.getenv("OLLAMA_IP", "127.0.0.1")
     ollama_url = f"http://{ollama_ip}:11434/api/generate"
-    ollama_model = "gemma3:270m"
+    ollama_model = os.getenv("OLLAMA_MODEL", "gemma4:latest")
     
     try:
         async with httpx.AsyncClient() as client:
@@ -123,7 +147,7 @@ Use this exact JSON schema:
                     "stream": False,
                     "format": "json"
                 },
-                timeout=60.0
+                timeout=180.0
             )
             response.raise_for_status()
             data = response.json()
@@ -136,10 +160,10 @@ Use this exact JSON schema:
     except Exception as e:
         print(f"Ollama API Error: {e}")
         from fastapi import HTTPException
-        raise HTTPException(status_code=503, detail=f"AI Server at {ollama_ip} is currently unreachable. Make sure Ollama is running on the other PC.")
+        raise HTTPException(status_code=503, detail=f"AI Server at {ollama_ip} is currently unreachable.")
     
     # Return the DAG nodes directly to the React frontend
-    return {"tree": llm_json}
+    return llm_json
 
 
 @router.post("/assistant")
@@ -162,7 +186,7 @@ async def test_ai_connection():
     """
     A ping test to verify the backend can successfully talk to the AI Server PC.
     """
-    ollama_ip = os.getenv("OLLAMA_IP", "10.239.16.36")
+    ollama_ip = os.getenv("OLLAMA_IP", "127.0.0.1")
     ollama_url = f"http://{ollama_ip}:11434/api/generate"
     
     try:
@@ -170,7 +194,7 @@ async def test_ai_connection():
             response = await client.post(
                 ollama_url,
                 json={
-                    "model": os.getenv("OLLAMA_MODEL", "gemma3:270m"),
+                    "model": os.getenv("OLLAMA_MODEL", "gemma4:latest"),
                     "prompt": "Say 'Connection Successful!' in JSON format: {\"status\": \"Connection Successful!\"}",
                     "stream": False,
                     "format": "json"
