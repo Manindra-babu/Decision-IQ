@@ -10,6 +10,9 @@ import {
     saveChatMessage,
     getChatHistory
 } from './services/roadmapService';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+console.log("DEBUG: Current API URL is:", API_BASE_URL);
 import {
     BrainCircuit,
     Map,
@@ -877,7 +880,7 @@ function SavedPaths({ navigate, setActiveGoalId, setSelectedRoadmap }) {
 
             try {
                 const response = await fetch(
-                    "http://localhost:8000/api/saved-roadmaps"
+                    `${API_BASE_URL}/saved-roadmaps`
                 );
 
                 const data = await response.json();
@@ -1914,7 +1917,7 @@ function DecisionAnalyzer({ navigate, setActiveGoalId, roadmap, setRoadmap }) {
         setSelectedSequence([]);
 
         try {
-            const response = await fetch("http://localhost:8000/api/generate-paths", {
+            const response = await fetch(`${API_BASE_URL}/generate-paths`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ start: startPoint, goal: endPoint })

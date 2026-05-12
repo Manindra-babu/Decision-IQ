@@ -132,37 +132,46 @@ Use this exact schema:
 }}
 """
 
-    # --- OLLAMA API INTEGRATION (Direct IPv4) ---
-    ollama_ip = os.getenv("OLLAMA_IP", "127.0.0.1")
-    ollama_url = f"http://{ollama_ip}:11434/api/generate"
-    ollama_model = os.getenv("OLLAMA_MODEL", "gemma4:latest")
+    # --- GROQ API INTEGRATION (Cloud Ready) ---
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    groq_url = "https://api.groq.com/openai/v1/chat/completions"
     
+    if not groq_api_key:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not found in environment")
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                ollama_url,
+                groq_url,
+                headers={
+                    "Authorization": f"Bearer {groq_api_key}",
+                    "Content-Type": "application/json"
+                },
                 json={
-                    "model": ollama_model,
-                    "prompt": system_prompt + f"\n\nUser's starting point: {request.start}\nTarget goal: {request.goal}",
-                    "stream": False,
-                    "format": "json"
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"User's starting point: {request.start}\nTarget goal: {request.goal}"}
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.4
                 },
                 timeout=180.0
             )
-            response.raise_for_status()
-            data = response.json()
             
-            # Ollama returns the generated response in the "response" field
-            llm_response_text = data.get("response", "{}")
-            cleaned_text = clean_llm_output(llm_response_text)
-            llm_json = json.loads(cleaned_text)
+            if response.status_code != 200:
+                print(f"Groq API Error: {response.text}")
+                raise HTTPException(status_code=500, detail="AI engine failure")
+
+            response_data = response.json()
+            content = response_data['choices'][0]['message']['content']
+            llm_json = json.loads(content)
             
     except Exception as e:
-        print(f"Ollama API Error: {e}")
-        from fastapi import HTTPException
-        raise HTTPException(status_code=503, detail=f"AI Server at {ollama_ip} is currently unreachable.")
+        print(f"AI API Error: {e}")
+        raise HTTPException(status_code=503, detail="The AI decision engine is currently overloaded.")
     
-    # Return the DAG nodes directly to the React frontend
+    # Return the roadmap JSON directly to the React frontend
     return llm_json
 
 
