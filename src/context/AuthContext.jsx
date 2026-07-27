@@ -51,18 +51,42 @@ export function AuthProvider({ children }) {
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        // Fetch profile data
-        const profileDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (profileDoc.exists()) {
-          setProfile(profileDoc.data());
+      try {
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          // Fetch profile data
+          try {
+            const profileDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (profileDoc.exists()) {
+              setProfile(profileDoc.data());
+            } else {
+              setProfile({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName || 'Student',
+                branch: 'B.Tech CSE',
+                gradYear: '2026',
+              });
+            }
+          } catch (profileError) {
+            console.error("Failed to fetch user profile from Firestore (Permissions issue):", profileError);
+            setProfile({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName || 'Student',
+              branch: 'B.Tech CSE',
+              gradYear: '2026',
+            });
+          }
+        } else {
+          setUser(null);
+          setProfile(null);
         }
-      } else {
-        setUser(null);
-        setProfile(null);
+      } catch (authError) {
+        console.error("Auth state change error:", authError);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsubscribe; // cleanup on unmount
   }, []);
