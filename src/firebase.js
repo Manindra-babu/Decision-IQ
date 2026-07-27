@@ -15,21 +15,36 @@ const firebaseConfig = {
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialise the Firebase app
-const app = initializeApp(firebaseConfig);
+// Check if Firebase keys are fully configured
+export const isMock = !import.meta.env.VITE_FIREBASE_API_KEY;
 
-// Auth instance
-export const auth = getAuth(app);
+let app;
+let auth;
+let db;
+let googleProvider;
 
-// Firestore instance — using long polling to bypass AdBlockers or VPN restrictions
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-});
+if (!isMock) {
+  try {
+    // Initialise the Firebase app
+    app = initializeApp(firebaseConfig);
+    // Auth instance
+    auth = getAuth(app);
+    // Firestore instance — using long polling to bypass AdBlockers or VPN restrictions
+    db = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
+    // Google provider (pre-configured to always show account picker)
+    googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
+  } catch (error) {
+    console.error("Firebase initialization failed, falling back to mock mode:", error);
+  }
+} else {
+  console.warn("Firebase API key missing. Decision IQ is running in LOCAL STORAGE fallback mode.");
+  auth = {};
+  db = {};
+  googleProvider = {};
+}
 
-
-// Google provider (pre-configured to always show account picker)
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
-
+export { auth, db, googleProvider };
 export default app;
-

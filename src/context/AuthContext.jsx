@@ -13,7 +13,7 @@ import {
   sendEmailVerification,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, googleProvider, db } from '../firebase';
+import { auth, googleProvider, db, isMock } from '../firebase';
 
 // ── Context ──────────────────────────────────────────────────────────────────
 const AuthContext = createContext(null);
@@ -31,8 +31,25 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true); // true until Firebase responds
 
-  // Subscribe to Firebase auth state (persists across reloads automatically)
+  // Subscribe to Firebase auth state or Mock Auth state
   useEffect(() => {
+    if (isMock) {
+      const storedUser = localStorage.getItem('decisionIq_mockUser');
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
+        setProfile({
+          uid: parsed.uid,
+          email: parsed.email,
+          displayName: parsed.displayName || 'Developer',
+          branch: 'B.Tech CSE',
+          gradYear: '2026',
+        });
+      }
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
@@ -54,19 +71,51 @@ export function AuthProvider({ children }) {
 
   /** Sign in with email + password */
   async function signInWithEmail(email, password) {
+    if (isMock) {
+      const mockUser = {
+        uid: 'mock-uid-12345',
+        email: email,
+        displayName: email.split('@')[0],
+      };
+      localStorage.setItem('decisionIq_mockUser', JSON.stringify(mockUser));
+      setUser(mockUser);
+      setProfile({
+        uid: mockUser.uid,
+        email: mockUser.email,
+        displayName: mockUser.displayName,
+        branch: 'B.Tech CSE',
+        gradYear: '2026',
+      });
+      return mockUser;
+    }
+
     const cred = await signInWithEmailAndPassword(auth, email, password);
     return cred.user;
   }
 
   /**
    * Register with email + password.
-   * @param {string} email
-   * @param {string} password
-   * @param {string} displayName - shown in the app (e.g. "Alex Johnson")
-   * @param {object} additionalData - branch, gradYear, etc.
-   * @param {boolean} sendVerification - send verification email after register
    */
   async function signUpWithEmail(email, password, displayName = '', additionalData = {}, sendVerification = true) {
+    if (isMock) {
+      const mockUser = {
+        uid: 'mock-uid-12345',
+        email: email,
+        displayName: displayName || email.split('@')[0],
+      };
+      localStorage.setItem('decisionIq_mockUser', JSON.stringify(mockUser));
+      setUser(mockUser);
+      setProfile({
+        uid: mockUser.uid,
+        email: mockUser.email,
+        displayName: mockUser.displayName,
+        branch: 'B.Tech CSE',
+        gradYear: '2026',
+        ...additionalData,
+      });
+      return mockUser;
+    }
+
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     
     // Create user profile in Firestore
@@ -89,12 +138,36 @@ export function AuthProvider({ children }) {
 
   /** Sign in / register via Google popup */
   async function signInWithGoogle() {
+    if (isMock) {
+      const mockUser = {
+        uid: 'mock-uid-google-123',
+        email: 'google.dev@example.com',
+        displayName: 'Google Dev',
+      };
+      localStorage.setItem('decisionIq_mockUser', JSON.stringify(mockUser));
+      setUser(mockUser);
+      setProfile({
+        uid: mockUser.uid,
+        email: mockUser.email,
+        displayName: mockUser.displayName,
+        branch: 'B.Tech CSE',
+        gradYear: '2026',
+      });
+      return mockUser;
+    }
+
     const cred = await signInWithPopup(auth, googleProvider);
     return cred.user;
   }
 
   /** Sign out the current user */
   async function logout() {
+    if (isMock) {
+      localStorage.removeItem('decisionIq_mockUser');
+      setUser(null);
+      setProfile(null);
+      return;
+    }
     await signOut(auth);
   }
 

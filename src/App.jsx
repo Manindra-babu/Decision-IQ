@@ -189,7 +189,7 @@ export default function App() {
                 {currentView === 'landing' &&
                     <LandingPage navigate={navigate} />}
                 {currentView === 'dashboard' &&
-                    <Dashboard navigate={navigate} setActiveGoalId={setActiveGoalId} />}
+                    <Dashboard navigate={navigate} setActiveGoalId={setActiveGoalId} setSelectedRoadmap={setSelectedRoadmap} />}
                 {currentView === 'goal-overview' &&
                     <GoalOverview navigate={navigate} setActiveGoalId={setActiveGoalId} />}
                 {currentView === 'career-roadmap' &&
@@ -223,9 +223,9 @@ export default function App() {
                 {currentView === 'risk' &&
                     <RiskAnalyzer navigate={navigate} />}
                 {currentView === 'recommendations' &&
-                    <Recommendations navigate={navigate} />}
+                    <Recommendations navigate={navigate} activeGoalId={activeGoalId} />}
                 {currentView === 'report' &&
-                    <ReportAnalysis navigate={navigate} />}
+                    <ReportAnalysis navigate={navigate} activeGoalId={activeGoalId} />}
             </main>
 
             {/* Floating AI Chatbot - Visible ONLY after login */}
@@ -381,8 +381,15 @@ const Sidebar = React.memo(({ currentView, navigate, isMobileMenuOpen, setIsMobi
 
                     <SidebarSection title="Advanced Tools" isSidebarOpen={isSidebarOpen} />
                     <SidebarLink active={currentView === 'analyzer'} onClick={() => navigate('analyzer')}
-                        icon={
-                            <GitCompare size={18} />} text="Analyzer" isSidebarOpen={isSidebarOpen} />
+                        icon={<GitCompare size={18} />} text="Path Builder" isSidebarOpen={isSidebarOpen} />
+                    <SidebarLink active={currentView === 'risk'} onClick={() => navigate('risk')}
+                        icon={<ShieldAlert size={18} />} text="Risk Simulator" isSidebarOpen={isSidebarOpen} />
+                    <SidebarLink active={currentView === 'recommendations'} onClick={() => navigate('recommendations')}
+                        icon={<Sparkles size={18} />} text="Recommendations" isSidebarOpen={isSidebarOpen} />
+                    <SidebarLink active={currentView === 'report'} onClick={() => navigate('report')}
+                        icon={<FileText size={18} />} text="Career Health" isSidebarOpen={isSidebarOpen} />
+                    <SidebarLink active={currentView === 'assistant'} onClick={() => navigate('assistant')}
+                        icon={<Bot size={18} />} text="AI Guide" isSidebarOpen={isSidebarOpen} />
 
                     <div className="h-px bg-slate-200/60 dark:bg-slate-800/60 my-2 mx-4"></div>
 
@@ -470,7 +477,7 @@ function LandingPage({ navigate }) {
 }
 
 // --- DASHBOARD COMPONENT ---
-const Dashboard = React.memo(({ navigate, setActiveGoalId }) => {
+const Dashboard = React.memo(({ navigate, setActiveGoalId, setSelectedRoadmap }) => {
     const { user, profile } = useAuth();
     const [paths, setPaths] = useState([]);
     const [isFetching, setIsFetching] = useState(true);
@@ -524,7 +531,7 @@ const Dashboard = React.memo(({ navigate, setActiveGoalId }) => {
                          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     </div>
                 ) : paths.map((path) => (
-                    <div key={path.id} onClick={() => { setActiveGoalId(path.id); navigate('career-roadmap'); }}
+                    <div key={path.id} onClick={() => { setSelectedRoadmap(path); setActiveGoalId(path.id); navigate('career-roadmap'); }}
                         className="glass-panel p-6 rounded-sm border border-slate-300 dark:border-slate-800
             hover:border-[var(--c-primary)] shadow-md transition-all cursor-pointer group flex flex-col">
                         <div className="flex items-start justify-between mb-6">
@@ -744,9 +751,11 @@ function Roadmap({ activeGoalId, setActiveGoalId, selectedRoadmap }) {
         if (selectedRoadmap?.nodes?.length > 0) {
             const formattedNodes = selectedRoadmap.nodes.map((node, index) => ({
                 id: node.id || index,
-                title: node.label,
-                status: "pending",
-                icon: <Target size={18} />
+                title: node.title || node.label || 'Step',
+                description: node.description || '',
+                status: node.status || 'pending',
+                icon: node.isStage ? <Layers size={18} /> : (node.status === 'completed' ? <CheckCircle2 size={18} /> : <Target size={18} />),
+                isStage: !!node.isStage
             }));
             setNodes(formattedNodes);
             return;
@@ -1894,6 +1903,57 @@ roadmap today?`
     );
 });
 
+// Map roadmap stages to DAG structure for PathCanvas React Flow
+const translateRoadmapToDag = (roadmap, startPoint) => {
+    if (!roadmap || !roadmap.stages) return null;
+    const nodes = [];
+
+    // Add root node
+    nodes.push({
+        id: 'root',
+        label: startPoint || 'Start Point',
+        description: 'Starting point',
+        track: 'Start',
+        depends_on: []
+    });
+
+    let lastStageId = 'root';
+    roadmap.stages.forEach((stage, sIdx) => {
+        const stageId = `stage_${sIdx}`;
+        nodes.push({
+            id: stageId,
+            label: stage.title,
+            description: `Stage ${sIdx + 1}`,
+            track: stage.title,
+            depends_on: [lastStageId]
+        });
+
+        (stage.topics || []).forEach((topic, tIdx) => {
+            const topicId = `stage_${sIdx}_topic_${tIdx}`;
+            nodes.push({
+                id: topicId,
+                label: topic.name,
+                description: topic.description,
+                track: stage.title,
+                depends_on: [stageId]
+            });
+        });
+
+        lastStageId = stageId;
+    });
+
+    // Add final goal node
+    nodes.push({
+        id: 'goal',
+        label: roadmap.role || 'Goal',
+        description: 'Target Goal',
+        track: 'Goal',
+        depends_on: [lastStageId]
+    });
+
+    return { nodes };
+};
+
 // --- PATH GENERATOR & ANALYZER MODULE ---
 function DecisionAnalyzer({ navigate, setActiveGoalId, roadmap, setRoadmap }) {
     const { user } = useAuth();
@@ -1902,6 +1962,7 @@ function DecisionAnalyzer({ navigate, setActiveGoalId, roadmap, setRoadmap }) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState(null);
     const [treeData, setTreeData] = useState(null);
+    const [viewMode, setViewMode] = useState('list'); // 'list' or 'dag'
 
     // Tracks the sequence of nodes the user has selected to reach the goal
     const [selectedSequence, setSelectedSequence] = useState([]);
@@ -2068,26 +2129,689 @@ function DecisionAnalyzer({ navigate, setActiveGoalId, roadmap, setRoadmap }) {
                 )}
             </div>
 
+            {/* View Mode Switcher */}
+            {roadmap && (
+                <div className="flex justify-center space-x-4 mb-8">
+                    <button
+                        onClick={() => setViewMode('list')}
+                        className={`px-5 py-2.5 rounded-sm text-[10px] font-black uppercase tracking-widest transition-all border ${
+                            viewMode === 'list'
+                                ? 'bg-slate-900 dark:bg-blue-600 text-white border-transparent shadow-md'
+                                : 'bg-white dark:bg-slate-800 text-slate-500 hover:text-[var(--c-primary)] border-slate-200 dark:border-slate-700'
+                        }`}
+                    >
+                        Detailed List
+                    </button>
+                    <button
+                        onClick={() => setViewMode('dag')}
+                        className={`px-5 py-2.5 rounded-sm text-[10px] font-black uppercase tracking-widest transition-all border ${
+                            viewMode === 'dag'
+                                ? 'bg-slate-900 dark:bg-blue-600 text-white border-transparent shadow-md'
+                                : 'bg-white dark:bg-slate-800 text-slate-500 hover:text-[var(--c-primary)] border-slate-200 dark:border-slate-700'
+                        }`}
+                    >
+                        Visual Flow Map
+                    </button>
+                </div>
+            )}
+
             {/* Visual Path Mapping UI (DAG Layout) */}
-            <RoadmapRenderer roadmap={roadmap} />
+            {viewMode === 'list' ? (
+                <RoadmapRenderer roadmap={roadmap} />
+            ) : (
+                <PathCanvas treeData={translateRoadmapToDag(roadmap, startPoint)} />
+            )}
         </div>
     );
 }
 
 // --- HIDDEN ROUTE COMPONENTS ---
 function RiskAnalyzer({ navigate }) {
-    return <div
-        className="p-20 text-center uppercase font-black tracking-widest text-slate-400">Risk Assessment Module</div>;
+    const [decision, setDecision] = useState('');
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [result, setResult] = useState(null);
+    const [error, setError] = useState(null);
+
+    const presetDecisions = [
+        "I want to skip system design prep and only focus on DSA for placement.",
+        "I'll skip making projects and just grind LeetCode for placements.",
+        "I want to learn AI/ML directly without studying Python or basic programming.",
+        "I will apply only to remote US startups as a fresh graduate without local backup.",
+        "I will focus entirely on Web3/Blockchain development and ignore general software engineering foundations."
+    ];
+
+    const handleAnalyze = async (textToAnalyze) => {
+        const queryText = textToAnalyze || decision;
+        if (!queryText.trim()) return;
+
+        setIsAnalyzing(true);
+        setError(null);
+        setResult(null);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/analyze-risk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision: queryText })
+            });
+
+            if (!response.ok) throw new Error("Failed to analyze decision.");
+            const data = await response.json();
+            setResult(data);
+        } catch (err) {
+            console.error(err);
+            setError("Could not analyze this decision. The server might be offline.");
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const getRiskColor = (level) => {
+        switch (level?.toUpperCase()) {
+            case 'HIGH': return 'text-red-500 border-red-500 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.3)]';
+            case 'MEDIUM': return 'text-amber-500 border-amber-500 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.3)]';
+            case 'LOW': return 'text-emerald-500 border-emerald-500 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.3)]';
+            default: return 'text-blue-500 border-blue-500 bg-blue-500/10';
+        }
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 mt-12 relative z-10 animate-fade-in-up pb-20">
+            <div className="text-center mb-10">
+                <div className="inline-flex items-center justify-center p-4 bg-red-600 dark:bg-rose-600 rounded-sm mb-6 shadow-lg">
+                    <ShieldAlert size={32} className="text-white" />
+                </div>
+                <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mb-4 uppercase tracking-tighter">
+                    Risk Simulator
+                </h1>
+                <p className="text-slate-600 dark:text-slate-400 text-lg font-medium max-w-2xl mx-auto">
+                    Simulate how a career decision will play out over 6 months. Identify pitfalls, uncover root causes, and find safer alternate paths.
+                </p>
+            </div>
+
+            <div className="glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 mb-8">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-3">
+                    Select a Preset Career Choice
+                </label>
+                <div className="flex flex-col gap-2 mb-6">
+                    {presetDecisions.map((preset, idx) => (
+                        <button
+                            key={idx}
+                            onClick={() => { setDecision(preset); handleAnalyze(preset); }}
+                            className="text-left px-4 py-3 rounded-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 hover:border-[var(--c-primary)] dark:hover:border-[var(--c-primary)] hover:bg-slate-100 dark:hover:bg-slate-800/50 text-xs font-semibold transition-all"
+                        >
+                            {preset}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="h-px bg-slate-200 dark:bg-slate-800 my-6"></div>
+
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-3">
+                    Or Describe Your Custom Decision
+                </label>
+                <div className="flex flex-col sm:flex-row gap-4">
+                    <input
+                        type="text"
+                        value={decision}
+                        onChange={(e) => setDecision(e.target.value)}
+                        placeholder="e.g. I will skip coding practice this semester to learn digital marketing"
+                        className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm p-3.5 text-sm font-semibold text-slate-900 dark:text-white focus:border-[var(--c-primary)] outline-none transition-all"
+                    />
+                    <button
+                        onClick={() => handleAnalyze()}
+                        disabled={isAnalyzing || !decision.trim()}
+                        className="bg-slate-900 dark:bg-rose-600 text-white px-8 py-3.5 rounded-sm font-bold text-xs uppercase tracking-widest flex items-center justify-center space-x-2 shadow-lg disabled:opacity-50 border border-rose-500/50 transition-all hover:-translate-y-0.5"
+                    >
+                        {isAnalyzing ? (
+                            <>
+                                <Loader2 size={16} className="animate-spin text-[#0ff]" />
+                                <span className="text-[#0ff]">Analyzing...</span>
+                            </>
+                        ) : (
+                            <>
+                                <Activity size={16} />
+                                <span>Simulate Timeline</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+                {error && <p className="text-red-500 text-xs font-bold mt-4 uppercase tracking-widest">{error}</p>}
+            </div>
+
+            {/* Results Output */}
+            {result && (
+                <div className="space-y-8 animate-fade-in-up">
+                    <div className="glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                        <div className="space-y-2">
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Simulated Decision</span>
+                            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-snug">"{result.decision}"</h2>
+                        </div>
+                        <div className={`px-4 py-2 border rounded-sm text-xs font-black uppercase tracking-widest ${getRiskColor(result.risk_level)}`}>
+                            {result.risk_level} Risk
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-2 glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 space-y-4">
+                            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center border-b dark:border-slate-800 pb-2">
+                                <AlertTriangle size={14} className="mr-2 text-rose-500" /> Root Cause Analysis
+                            </h3>
+                            <p className="text-slate-700 dark:text-slate-300 text-sm font-semibold leading-relaxed">
+                                {result.root_cause}
+                            </p>
+                        </div>
+                        <div className="glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 bg-emerald-500/5 border-emerald-500/20 space-y-4">
+                            <h3 className="text-[10px] font-black uppercase text-emerald-500 tracking-widest flex items-center border-b border-emerald-500/10 pb-2">
+                                <ShieldCheck size={14} className="mr-2 text-emerald-400" /> Alternate Route
+                            </h3>
+                            <p className="text-slate-700 dark:text-slate-300 text-xs font-bold leading-relaxed mb-4">
+                                {result.alternate_path}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="glass-panel p-6 sm:p-10 rounded-sm border border-slate-300 dark:border-slate-800">
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b dark:border-slate-800 pb-3 mb-8 text-center">
+                            6-Month Timeline Simulation
+                        </h3>
+                        <div className="relative border-l-2 border-slate-200 dark:border-slate-800 ml-4 sm:ml-8 space-y-8">
+                            {result.months.map((monthText, index) => (
+                                <div key={index} className="relative pl-8 sm:pl-10 transition-all group">
+                                    <div className={`absolute -left-[11px] top-5 w-5 h-5 rounded-full border-[3px] z-10 bg-rose-500 border-white dark:border-slate-900`} />
+                                    <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-5 rounded-sm shadow-md hover:border-rose-500/30 transition-all">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-black uppercase tracking-wider text-rose-500">Month {index + 1}</span>
+                                        </div>
+                                        <p className="text-slate-600 dark:text-slate-300 text-sm font-semibold leading-relaxed">
+                                            {monthText}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }
-function Recommendations({ navigate }) {
-    return <div
-        className="p-20 text-center uppercase font-black tracking-widest text-slate-400">Recommendations Module</div>;
+const RECOMMENDATIONS_DB = {
+    'ai': {
+        title: 'AI Engineer',
+        courses: [
+            { title: 'Deep Learning Specialization', platform: 'Coursera (Andrew Ng)', rating: '4.9', link: 'https://coursera.org' },
+            { title: 'PyTorch for Deep Learning Boot Camp', platform: 'Udemy', rating: '4.7', link: 'https://udemy.com' },
+            { title: 'Hugging Face NLP Course', platform: 'Hugging Face (Free)', rating: '5.0', link: 'https://huggingface.co' }
+        ],
+        projects: [
+            { title: 'Retrieval-Augmented Generation (RAG) System', desc: 'Build a private PDF Q&A bot using LangChain, OpenAI API, and Pinecone vector database.' },
+            { title: 'Fine-Tune Llama 3 on Custom Dataset', desc: 'Use LoRA/QLoRA technique to fine-tune Llama 3 for specialized domain reasoning.' },
+            { title: 'Real-time Object Detection Pipeline', desc: 'Implement YOLOv8 with PyTorch for low-latency video analytics streams.' }
+        ],
+        certs: [
+            { name: 'Google Cloud Professional ML Engineer', level: 'Advanced' },
+            { name: 'TensorFlow Developer Certificate', level: 'Intermediate' }
+        ]
+    },
+    'ds': {
+        title: 'Data Scientist',
+        courses: [
+            { title: 'Applied Data Science with Python', platform: 'Coursera (U. Michigan)', rating: '4.8', link: 'https://coursera.org' },
+            { title: 'SQL & Database Design Masterclass', platform: 'Udemy', rating: '4.6', link: 'https://udemy.com' },
+            { title: 'Data Analysis with Pandas and NumPy', platform: 'Udemy', rating: '4.7', link: 'https://udemy.com' }
+        ],
+        projects: [
+            { title: 'E-Commerce Customer Segmentation', desc: 'Perform RFM analysis and K-means clustering to segment shoppers and optimize marketing.' },
+            { title: 'House Price Forecasting Model', desc: 'Develop an XGBoost regression model with hyperparameter tuning to forecast real estate listings.' },
+            { title: 'Interactive Finance Dashboard', desc: 'Build a Streamlit dashboard showing real-time stock analytics and correlation heatmaps.' }
+        ],
+        certs: [
+            { name: 'Microsoft Certified: Power BI Data Analyst', level: 'Intermediate' },
+            { name: 'Databricks Certified Associate Data Scientist', level: 'Advanced' }
+        ]
+    },
+    'cyb': {
+        title: 'Cybersecurity Expert',
+        courses: [
+            { title: 'CompTIA Security+ (SY0-701) Prep Course', platform: 'Udemy (Jason Dion)', rating: '4.8', link: 'https://udemy.com' },
+            { title: 'Google Cybersecurity Professional Certificate', platform: 'Coursera', rating: '4.8', link: 'https://coursera.org' },
+            { title: 'Practical Ethical Hacking', platform: 'TCM Academy', rating: '4.9', link: 'https://tcm-sec.com' }
+        ],
+        projects: [
+            { title: 'Network Vulnerability Scanner', desc: 'Write a Python tool leveraging Nmap to scan subnets and flag outdated services.' },
+            { title: 'Active Directory Pentesting Lab', desc: 'Build a virtual machine home lab to practice AD poisoning and hash passing.' },
+            { title: 'Syslog SIEM Dashboard', desc: 'Set up ELK stack to aggregate firewall logs and trigger alerts on brute force attempts.' }
+        ],
+        certs: [
+            { name: 'CompTIA Security+', level: 'Entry' },
+            { name: 'Certified Information Systems Security Professional (CISSP)', level: 'Expert' },
+            { name: 'Offensive Security Certified Professional (OSCP)', level: 'Advanced' }
+        ]
+    },
+    'cld': {
+        title: 'Cloud Engineer',
+        courses: [
+            { title: 'AWS Solutions Architect Associate Prep', platform: 'Udemy (Adrian Cantrill)', rating: '4.9', link: 'https://udemy.com' },
+            { title: 'Docker and Kubernetes: The Complete Guide', platform: 'Udemy (Stephen Grider)', rating: '4.8', link: 'https://udemy.com' },
+            { title: 'Terraform Certified Associate Prep', platform: 'Udemy', rating: '4.7', link: 'https://udemy.com' }
+        ],
+        projects: [
+            { title: 'Multi-Tier Cloud Deployment', desc: 'Deploy a highly-available VPC with autoscaling EC2 web servers and RDS database on AWS.' },
+            { title: 'GitOps Kubernetes Pipeline', desc: 'Configure GitHub Actions and ArgoCD to auto-deploy frontend updates to an EKS cluster.' },
+            { title: 'Serverless Video Transcoder', desc: 'Use AWS Lambda, S3 triggers, and MediaConvert to automatically encode uploaded files.' }
+        ],
+        certs: [
+            { name: 'AWS Certified Solutions Architect - Associate', level: 'Intermediate' },
+            { name: 'HashiCorp Certified: Terraform Associate', level: 'Intermediate' },
+            { name: 'Certified Kubernetes Administrator (CKA)', level: 'Advanced' }
+        ]
+    }
+};
+
+function Recommendations({ navigate, activeGoalId }) {
+    const goalId = ['ai', 'ds', 'cyb', 'cld'].includes(activeGoalId) ? activeGoalId : 'ai';
+    const data = RECOMMENDATIONS_DB[goalId];
+
+    return (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-12 relative z-10 animate-fade-in-up pb-20">
+            <div className="text-center mb-12">
+                <div className="inline-flex items-center justify-center p-4 bg-slate-900 dark:bg-blue-600 rounded-sm mb-6 shadow-lg">
+                    <Sparkles size={32} className="text-white" />
+                </div>
+                <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mb-4 uppercase tracking-tighter">
+                    AI Recommendations
+                </h1>
+                <p className="text-slate-600 dark:text-slate-400 text-lg font-medium">
+                    Curated resources, projects, and certifications for target: <span className="text-[var(--c-primary)] font-black uppercase">{data.title}</span>.
+                </p>
+            </div>
+
+            {/* Grid for Courses and Certs */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+                {/* Courses */}
+                <div className="lg:col-span-2 glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 space-y-6">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b dark:border-slate-800 pb-3 flex items-center">
+                        <BookOpen size={16} className="mr-2 text-[var(--c-primary)]" /> Recommended Courses & Tutorials
+                    </h3>
+                    <div className="space-y-4">
+                        {data.courses.map((course, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-sm hover:border-[var(--c-primary)]/40 transition-all">
+                                <div>
+                                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">{course.title}</h4>
+                                    <p className="text-[10px] font-black uppercase text-slate-400 mt-1">{course.platform}</p>
+                                </div>
+                                <div className="flex items-center space-x-4">
+                                    <span className="text-xs font-black text-amber-500 flex items-center">
+                                        <Star size={14} className="mr-1 fill-amber-500" /> {course.rating}
+                                    </span>
+                                    <a href={course.link} target="_blank" rel="noopener noreferrer" className="p-2 text-[var(--c-primary)] hover:text-white hover:bg-[var(--c-primary)] border border-[var(--c-primary)]/30 rounded-sm transition-all text-[10px] font-black uppercase tracking-wider">
+                                        Link <ExternalLink size={10} className="inline ml-1" />
+                                    </a>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Certifications */}
+                <div className="glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 space-y-6">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b dark:border-slate-800 pb-3 flex items-center">
+                        <Award size={16} className="mr-2 text-rose-500" /> Key Certifications
+                    </h3>
+                    <div className="space-y-4">
+                        {data.certs.map((cert, idx) => (
+                            <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-sm flex justify-between items-center">
+                                <span className="font-bold text-slate-800 dark:text-slate-300 text-xs">{cert.name}</span>
+                                <span className={`px-2 py-1 rounded-sm text-[8px] font-black uppercase tracking-wider border ${
+                                    cert.level === 'Advanced' || cert.level === 'Expert'
+                                        ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                                        : 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                                }`}>
+                                    {cert.level}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Hands-on Projects */}
+            <div className="glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 space-y-6">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b dark:border-slate-800 pb-3 flex items-center">
+                    <Code2 size={16} className="mr-2 text-emerald-500" /> Recommended Hands-On Projects
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {data.projects.map((proj, idx) => (
+                        <div key={idx} className="p-5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-sm hover:border-emerald-500/30 transition-all flex flex-col justify-between">
+                            <div className="space-y-3">
+                                <h4 className="font-black text-slate-900 dark:text-white text-base leading-snug">{proj.title}</h4>
+                                <p className="text-slate-600 dark:text-slate-400 text-xs font-semibold leading-relaxed">{proj.desc}</p>
+                            </div>
+                            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase text-emerald-500 flex items-center cursor-pointer">
+                                Add to Portfolio
+                                <ArrowRight size={10} className="ml-1.5" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
 }
-function ReportAnalysis({ navigate }) {
-    return <div
-        className="p-20 text-center uppercase font-black tracking-widest text-slate-400">Career Health Report Module</div>;
+const READINESS_DB = {
+    'ai': {
+        title: 'AI Engineer',
+        score: 75,
+        skills: [
+            { name: 'Python Basics', status: 'completed' },
+            { name: 'Linear Algebra & Calculus', status: 'completed' },
+            { name: 'Scikit-Learn & ML basics', status: 'completed' },
+            { name: 'Neural Networks (PyTorch)', status: 'in-progress' },
+            { name: 'NLP & LLM Tuning', status: 'pending' },
+            { name: 'MLOps Deployment', status: 'pending' }
+        ],
+        actions: [
+            { task: 'Complete PyTorch basics course', priority: 'Critical', desc: 'Required for neural network understanding.' },
+            { task: 'Build and deploy a simple RAG application', priority: 'High', desc: 'Adds critical portfolio project weight.' },
+            { task: 'Study CAP Theorem & HLD basics', priority: 'Medium', desc: 'Frequently tested in Tier-1 placements.' }
+        ]
+    },
+    'ds': {
+        title: 'Data Scientist',
+        score: 82,
+        skills: [
+            { name: 'Stats & Probability', status: 'completed' },
+            { name: 'Python & Pandas', status: 'completed' },
+            { name: 'SQL Query Tuning', status: 'completed' },
+            { name: 'Regression & Classification', status: 'completed' },
+            { name: 'Feature Engineering', status: 'in-progress' },
+            { name: 'Big Data (Spark/Hadoop)', status: 'pending' }
+        ],
+        actions: [
+            { task: 'Learn Feature Selection methodologies', priority: 'High', desc: 'Required for dataset accuracy refinement.' },
+            { task: 'Build interactive stock data dashboard', priority: 'Medium', desc: 'Demonstrates data visualization fluency.' },
+            { task: 'Practice SQL joins & window functions', priority: 'Critical', desc: 'Highly tested in initial technical screens.' }
+        ]
+    },
+    'cyb': {
+        title: 'Cybersecurity Expert',
+        score: 55,
+        skills: [
+            { name: 'Networking Basics', status: 'completed' },
+            { name: 'Linux Commands & Shell', status: 'completed' },
+            { name: 'OWASP Top 10 vulnerabilities', status: 'in-progress' },
+            { name: 'Active Directory Pentesting', status: 'pending' },
+            { name: 'Cryptography & TLS', status: 'pending' },
+            { name: 'SIEM aggregation (Splunk)', status: 'pending' }
+        ],
+        actions: [
+            { task: 'Get CompTIA Security+ certified', priority: 'Critical', desc: 'Standard entry barrier for security operations center roles.' },
+            { task: 'Build a private AD lab and compromise it', priority: 'High', desc: 'Hands-on practice with lateral movement mechanisms.' },
+            { task: 'Learn Bash/Python automation scripting', priority: 'Medium', desc: 'Useful for automated parsing of firewalls.' }
+        ]
+    },
+    'cld': {
+        title: 'Cloud Engineer',
+        score: 65,
+        skills: [
+            { name: 'Linux & OS foundations', status: 'completed' },
+            { name: 'AWS core services (VPC, EC2)', status: 'completed' },
+            { name: 'Docker Containerization', status: 'in-progress' },
+            { name: 'Kubernetes Orchestration', status: 'pending' },
+            { name: 'CI/CD pipeline configuration', status: 'pending' },
+            { name: 'Infrastructure as Code (Terraform)', status: 'pending' }
+        ],
+        actions: [
+            { task: 'Dockerize local web application', priority: 'Critical', desc: 'Fundamental step to understand image configuration.' },
+            { task: 'Configure GitHub Actions CI/CD to AWS', priority: 'High', desc: 'Demonstrates build & deployment automation.' },
+            { task: 'Study Terraform state & modules', priority: 'Medium', desc: 'Industry-standard infrastructure provisioning.' }
+        ]
+    }
+};
+
+function ReportAnalysis({ navigate, activeGoalId }) {
+    const goalId = ['ai', 'ds', 'cyb', 'cld'].includes(activeGoalId) ? activeGoalId : 'ai';
+    const report = READINESS_DB[goalId];
+
+    const getPriorityColor = (prio) => {
+        switch (prio) {
+            case 'Critical': return 'bg-red-500/10 text-red-500 border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.15)]';
+            case 'High': return 'bg-orange-500/10 text-orange-500 border-orange-500/30';
+            case 'Medium': return 'bg-amber-500/10 text-amber-500 border-amber-500/30';
+            default: return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+        }
+    };
+
+    return (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-12 relative z-10 animate-fade-in-up pb-20">
+            <div className="text-center mb-12">
+                <div className="inline-flex items-center justify-center p-4 bg-slate-900 dark:bg-blue-600 rounded-sm mb-6 shadow-lg">
+                    <FileText size={32} className="text-white" />
+                </div>
+                <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mb-4 uppercase tracking-tighter">
+                    Career Health Report
+                </h1>
+                <p className="text-slate-600 dark:text-slate-400 text-lg font-medium">
+                    Diagnostic check-up of your readiness profile for: <span className="text-[var(--c-primary)] font-black uppercase">{report.title}</span>.
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
+                {/* Score Panel */}
+                <div className="glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 flex flex-col items-center justify-center text-center">
+                    <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-6">Readiness Index</h3>
+                    <div className="relative w-36 h-36 flex items-center justify-center mb-6">
+                        <div className="absolute inset-0 rounded-full border-8 border-slate-200 dark:border-slate-800"></div>
+                        <div className="absolute inset-0 rounded-full border-8 border-transparent border-t-[var(--c-primary)] border-r-[var(--c-primary)] transform -rotate-45"></div>
+                        <span className="text-4xl font-black text-slate-900 dark:text-white">{report.score}%</span>
+                    </div>
+                    <span className="text-xs font-black uppercase tracking-widest text-emerald-500">Tier-2 Ready</span>
+                </div>
+
+                {/* Skill diagnostics */}
+                <div className="md:col-span-2 glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 space-y-6">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b dark:border-slate-800 pb-3 flex items-center">
+                        <Activity size={16} className="mr-2 text-cyan-500" /> Skill Audit Details
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {report.skills.map((skill, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-sm">
+                                <span className="text-xs font-bold text-slate-800 dark:text-slate-300">{skill.name}</span>
+                                <span className={`px-2 py-1 rounded-sm text-[8px] font-black uppercase tracking-wider border ${
+                                    skill.status === 'completed'
+                                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                        : skill.status === 'in-progress'
+                                        ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                                        : 'bg-slate-500/10 text-slate-400 border-slate-700'
+                                }`}>
+                                    {skill.status}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Prescribed Actions */}
+            <div className="glass-panel p-6 sm:p-8 rounded-sm border border-slate-300 dark:border-slate-800 space-y-6">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b dark:border-slate-800 pb-3 flex items-center">
+                    <AlertTriangle size={16} className="mr-2 text-rose-500" /> Prioritized Action Items
+                </h3>
+                <div className="space-y-4">
+                    {report.actions.map((act, idx) => (
+                        <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div className="space-y-1">
+                                <h4 className="font-bold text-slate-900 dark:text-white text-sm">{act.task}</h4>
+                                <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{act.desc}</p>
+                            </div>
+                            <span className={`px-3 py-1 border rounded-sm text-[8px] font-black uppercase tracking-widest ${getPriorityColor(act.priority)}`}>
+                                {act.priority}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
 }
 function AIAssistant() {
-    return <div className="p-20 text-center uppercase font-black tracking-widest text-slate-400">
-        Full AI Guide Module</div>;
+    const { user } = useAuth();
+    const [messages, setMessages] = useState([{
+        role: 'assistant',
+        content: "Hi! I'm your career navigator. Ask me anything about skills, learning resources, project ideas, or preparation strategies."
+    }]);
+    const [input, setInput] = useState('');
+    const [isTyping, setIsTyping] = useState(false);
+    const messagesEndRef = useRef(null);
+
+    useEffect(() => {
+        if (user) {
+            async function loadHistory() {
+                try {
+                    const history = await getChatHistory(user.uid);
+                    if (history.length > 0) {
+                        setMessages(history);
+                    }
+                } catch (error) {
+                    console.error("Failed to load chat history:", error);
+                }
+            }
+            loadHistory();
+        }
+    }, [user]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages, isTyping]);
+
+    const handleSend = async (text) => {
+        const userMsg = text || input;
+        if (!userMsg.trim() || !user) return;
+
+        const newUserMsg = { role: 'user', content: userMsg };
+        setMessages(prev => [...prev, newUserMsg]);
+        setInput('');
+        setIsTyping(true);
+
+        await saveChatMessage(user.uid, newUserMsg);
+
+        try {
+            const response = await fetch("https://mani-359-deci-iq-api.hf.space/generate", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    decision: userMsg,
+                    max_tokens: 600,
+                    temperature: 0.4
+                })
+            });
+
+            if (!response.ok) throw new Error("API Connection Failed");
+
+            const data = await response.json();
+            const aiResponse = data.response || "I'm sorry, I'm having trouble processing that right now.";
+
+            const assistantMsg = { role: 'assistant', content: aiResponse };
+            setMessages(prev => [...prev, assistantMsg]);
+            await saveChatMessage(user.uid, assistantMsg);
+        } catch (error) {
+            console.error("AI Error:", error);
+            const errorMsg = { role: 'assistant', content: "The career engine is currently cooling down. Please try again in a moment." };
+            setMessages(prev => [...prev, errorMsg]);
+        } finally {
+            setIsTyping(false);
+        }
+    };
+
+    const suggestedPrompts = [
+        "Why is CAP theorem important in System Design?",
+        "Suggest hands-on projects for Cloud Engineering.",
+        "What is the difference between supervised and unsupervised learning?",
+        "What certifications are valuable for a Cybersecurity path?"
+    ];
+
+    return (
+        <div className="max-w-5xl mx-auto mt-4 relative z-10 h-[calc(100vh-10rem)] flex flex-col glass-panel border border-slate-300 dark:border-slate-800 rounded-sm shadow-xl overflow-hidden font-cyber-body">
+            {/* Header */}
+            <div className="bg-slate-900 p-5 flex items-center justify-between border-b border-slate-800">
+                <div className="flex items-center space-x-4">
+                    <div className="bg-blue-600 p-2.5 rounded-sm">
+                        <Bot className="text-white w-6 h-6" />
+                    </div>
+                    <div>
+                        <h2 className="text-white font-black text-sm uppercase tracking-widest">Full AI Guide</h2>
+                        <div className="flex items-center space-x-1.5">
+                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">Live Guide Active</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 dark:bg-slate-950/50 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700">
+                {messages.map((msg, index) => (
+                    <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-pop-in`}>
+                        <div className={`flex items-start space-x-3 max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                            <div className={`p-2 rounded-sm ${msg.role === 'user' ? 'bg-slate-900 dark:bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-500'}`}>
+                                {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                            </div>
+                            <div className={`p-4 rounded-sm border text-sm font-semibold leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-slate-900 dark:bg-blue-600 border-slate-805 text-white' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-850 dark:text-slate-300'}`}>
+                                {msg.content}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {isTyping && (
+                    <div className="flex justify-start animate-pulse">
+                        <div className="flex items-start space-x-3">
+                            <div className="p-2 rounded-sm bg-slate-200 dark:bg-slate-800 text-slate-500">
+                                <Bot size={16} />
+                            </div>
+                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 py-3 rounded-sm text-xs font-bold uppercase tracking-widest text-slate-400">
+                                Navigator is planning...
+                            </div>
+                        </div>
+                    </div>
+                )}
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Suggested Prompts Grid */}
+            <div className="p-4 bg-slate-100/50 dark:bg-slate-950/20 border-t border-slate-200 dark:border-slate-800">
+                <span className="text-[9px] font-black uppercase text-slate-400 block mb-2">Suggested Inquiries</span>
+                <div className="flex flex-wrap gap-2">
+                    {suggestedPrompts.map((prompt, idx) => (
+                        <button key={idx} onClick={() => handleSend(prompt)} className="bg-white dark:bg-slate-900 hover:border-[var(--c-primary)] dark:hover:border-[var(--c-primary)] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-sm text-[10px] font-bold uppercase tracking-wider transition-all">
+                            {prompt}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Input Bar */}
+            <div className="p-5 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex items-center space-x-4">
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        placeholder="Ask the Decision IQ career engine..."
+                        className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-805 rounded-sm p-4 text-sm font-semibold text-slate-900 dark:text-white focus:border-[var(--c-primary)] outline-none transition-all"
+                    />
+                    <button
+                        onClick={() => handleSend()}
+                        disabled={!input.trim()}
+                        className="bg-slate-900 dark:bg-blue-600 text-white p-4 rounded-sm hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 transition-all border border-blue-500/30"
+                    >
+                        <Send size={18} />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 }

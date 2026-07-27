@@ -15,6 +15,9 @@ class ChatRequest(BaseModel):
     message: str
     context: dict = {}
 
+class RiskRequest(BaseModel):
+    decision: str
+
 # --- Helper function to transform LLM JSON to Frontend Tree ---
 def transform_to_tree(start: str, goal: str, llm_data: dict) -> dict:
     """
@@ -221,3 +224,177 @@ async def test_ai_connection():
             return {"message": "Success!", "aiResponse": parsed_json}
     except Exception as e:
         return {"message": "Connection failed", "error": str(e)}
+
+# --- Helpers for Local Risk Analysis Fallback ---
+def load_decision_data():
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "decision-data")
+    if not os.path.exists(path):
+        # Fallback if run from backend folder
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "decision-data")
+        if not os.path.exists(path):
+            path = "decision-data"
+            if not os.path.exists(path):
+                return []
+                
+    content = ""
+    for enc in ['utf-16-le', 'utf-8', 'latin-1']:
+        try:
+            with open(path, 'r', encoding=enc) as f:
+                content = f.read()
+            break
+        except Exception:
+            continue
+            
+    if not content:
+        return []
+        
+    examples = []
+    # Split content by "## Example"
+    parts = content.split("## Example")
+    for part in parts:
+        if not part.strip():
+            continue
+        lines = part.strip().split("\n")
+        
+        decision = ""
+        risk_level = "HIGH"
+        root_cause = ""
+        alternate_path = ""
+        months = []
+        
+        for line in lines:
+            line_str = line.strip()
+            if not line_str:
+                continue
+            
+            if line_str.startswith("**Decision:**"):
+                decision = line_str.replace("**Decision:**", "").strip().strip('"').strip("'")
+            elif line_str.startswith("Month "):
+                parts_month = line_str.split(":", 1)
+                if len(parts_month) > 1:
+                    months.append(parts_month[1].strip())
+                else:
+                    months.append(line_str)
+            elif line_str.startswith("**Risk Level:**"):
+                risk_level = line_str.replace("**Risk Level:**", "").replace("  ", "").strip()
+            elif line_str.startswith("**Root Cause:**"):
+                root_cause = line_str.replace("**Root Cause:**", "").replace("  ", "").strip()
+            elif line_str.startswith("**Alternate Path:**"):
+                alternate_path = line_str.replace("**Alternate Path:**", "").replace("  ", "").strip()
+                
+        if decision:
+            examples.append({
+                "decision": decision,
+                "risk_level": risk_level,
+                "root_cause": root_cause,
+                "alternate_path": alternate_path,
+                "months": months
+            })
+    return examples
+
+def find_best_match(query: str, examples: list):
+    query_clean = "".join([c.lower() for c in query if c.isalnum() or c.isspace()])
+    query_words = set(query_clean.split())
+    best_match = None
+    best_score = -1
+    
+    for ex in examples:
+        dec_clean = "".join([c.lower() for c in ex["decision"] if c.isalnum() or c.isspace()])
+        dec_words = set(dec_clean.split())
+        
+        overlap = query_words.intersection(dec_words)
+        if len(query_words.union(dec_words)) > 0:
+            score = len(overlap) / len(query_words.union(dec_words))
+        else:
+            score = 0
+            
+        if score > best_score:
+            best_score = score
+            best_match = ex
+            
+    if best_score < 0.05 and examples:
+        return examples[0]
+    return best_match
+
+@router.post("/analyze-risk")
+async def analyze_risk(request: RiskRequest):
+    """
+    Simulates career choice risk assessment using Groq LLM (if configured)
+    or falls back to Jaccard-overlap matching against 200+ decision-data examples.
+    """
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if groq_api_key:
+        try:
+            prompt = f"""
+            You are a Career Risk Architect. Analyze the following career decision:
+            "{request.decision}"
+            
+            Evaluate its risk level (HIGH, MEDIUM, or LOW), diagnose the root cause, simulate month-by-month trajectory for 6 months showing how it plays out, and provide a safer alternate path.
+            
+            Return strictly in JSON format:
+            {{
+              "decision": "{request.decision}",
+              "risk_level": "Risk Level (HIGH/MEDIUM/LOW)",
+              "root_cause": "Detailed analysis of root cause",
+              "months": [
+                "Month 1 simulation detail",
+                "Month 2 simulation detail",
+                "Month 3 simulation detail",
+                "Month 4 simulation detail",
+                "Month 5 simulation detail",
+                "Month 6 simulation detail"
+              ],
+              "alternate_path": "Recommended alternate route"
+            }}
+            """
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {groq_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.4
+                    },
+                    timeout=60.0
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    content = data['choices'][0]['message']['content']
+                    return json.loads(content)
+        except Exception as e:
+            print(f"Groq API Error in Risk Analysis: {e}")
+            
+    # Local fallback
+    examples = load_decision_data()
+    if not examples:
+        return {
+            "decision": request.decision,
+            "risk_level": "HIGH",
+            "root_cause": "This decision lacks focus on software engineering fundamentals.",
+            "months": [
+                "Realize you need to study core subjects.",
+                "Realize projects are essential for resume screening.",
+                "Fumble in technical interviews.",
+                "Receive rejections from major recruiters.",
+                "Stuck with service-based placements.",
+                "Begin prep from scratch to switch roles."
+            ],
+            "alternate_path": "Balance your preparation between coding practice and foundational projects."
+        }
+        
+    match = find_best_match(request.decision, examples)
+    if match:
+        return {
+            "decision": request.decision,
+            "risk_level": match["risk_level"],
+            "root_cause": match["root_cause"],
+            "months": match["months"],
+            "alternate_path": match["alternate_path"]
+        }
+        
+    return examples[0]
