@@ -34,6 +34,10 @@ async def preflight_handler(request: Request, rest_of_path: str):
 # Include Routers
 app.include_router(ai_routes.router, prefix="/api", tags=["AI Integration"])
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to Decision IQ AI Backend"}
