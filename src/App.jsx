@@ -11,7 +11,7 @@ import {
     getChatHistory
 } from './services/roadmapService';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? "http://localhost:8000/api" : "/api");
 console.log("DEBUG: Current API URL is:", API_BASE_URL);
 import {
     BrainCircuit,
@@ -1749,21 +1749,7 @@ roadmap today?`
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
 
-    useEffect(() => {
-        if (user) {
-            async function loadHistory() {
-                try {
-                    const history = await getChatHistory(user.uid);
-                    if (history.length > 0) {
-                        setMessages(history);
-                    }
-                } catch (error) {
-                    console.error("Failed to load chat history:", error);
-                }
-            }
-            loadHistory();
-        }
-    }, [user]);
+    // Chat starts fresh on each page reload
 
     useEffect(() => { if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping,
         isOpen]);
@@ -1777,8 +1763,7 @@ roadmap today?`
         setInput('');
         setIsTyping(true);
 
-        // Save user message to Firestore
-        await saveChatMessage(user.uid, newUserMsg);
+        // Purely local state chatbot session
 
         // ── Real AI Integration ───────────────────────────────────────────
         try {
@@ -1802,8 +1787,7 @@ roadmap today?`
             const assistantMsg = { role: 'assistant', content: aiResponse };
             setMessages(prev => [...prev, assistantMsg]);
             
-            // Save assistant message to Firestore
-            await saveChatMessage(user.uid, assistantMsg);
+            // Purely local state chatbot session
 
         } catch (error) {
             console.error("AI Error:", error);
@@ -2665,21 +2649,7 @@ function AIAssistant() {
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
 
-    useEffect(() => {
-        if (user) {
-            async function loadHistory() {
-                try {
-                    const history = await getChatHistory(user.uid);
-                    if (history.length > 0) {
-                        setMessages(history);
-                    }
-                } catch (error) {
-                    console.error("Failed to load chat history:", error);
-                }
-            }
-            loadHistory();
-        }
-    }, [user]);
+    // Chat starts fresh on each page reload
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2694,7 +2664,7 @@ function AIAssistant() {
         setInput('');
         setIsTyping(true);
 
-        await saveChatMessage(user.uid, newUserMsg);
+        // Purely local state chatbot session
 
         try {
             const response = await fetch("https://mani-359-deci-iq-api.hf.space/generate", {
@@ -2716,7 +2686,7 @@ function AIAssistant() {
 
             const assistantMsg = { role: 'assistant', content: aiResponse };
             setMessages(prev => [...prev, assistantMsg]);
-            await saveChatMessage(user.uid, assistantMsg);
+            // Purely local state chatbot session
         } catch (error) {
             console.error("AI Error:", error);
             const errorMsg = { role: 'assistant', content: "The career engine is currently cooling down. Please try again in a moment." };
