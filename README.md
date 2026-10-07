@@ -59,39 +59,34 @@ Instead of static, one-size-fits-all syllabi, Decision-IQ synthesizes personal s
 
 ## 🏛️ Architecture
 
-```mermaid
-graph TD
-    Client["React 19 + Vite Frontend<br/>(Tailwind CSS, ReactFlow, Lucide)"]
-    
-    subgraph Services ["External Services"]
-        FirebaseAuth["Firebase Auth<br/>(Google & Email)"]
-        Firestore["Cloud Firestore<br/>(Saved Roadmaps & Chat History)"]
-    end
-
-    subgraph Backend ["FastAPI Backend (Python)"]
-        Router["API Router (/api)"]
-        PathEngine["Path Generator<br/>(/generate-paths)"]
-        RiskEngine["Risk Simulator<br/>(/analyze-risk)"]
-        DecisionData["Decision Knowledge Bank<br/>(Local Fallback Dataset)"]
-    end
-
-    subgraph AI ["AI Intelligence Layer"]
-        Groq["Groq API<br/>(Llama 3.3 70B)"]
-        Ollama["Local Ollama<br/>(Gemma / Llama 3)"]
-    end
-
-    Client <--> FirebaseAuth
-    Client <--> Firestore
-    Client <--> Router
-
-    Router --> PathEngine
-    Router --> RiskEngine
-
-    PathEngine <--> Groq
-    PathEngine <--> Ollama
-
-    RiskEngine <--> Groq
-    RiskEngine <--> DecisionData
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          React 19 + Vite Frontend                           │
+│                 Tailwind CSS v4 • ReactFlow • Lucide Icons                  │
+└──────────────────────┬───────────────────────────────┬──────────────────────┘
+                       │                               │
+                       ▼                               ▼
+       ┌───────────────────────────────┐   ┌──────────────────────────┐
+       │        FastAPI Backend        │   │      Firebase Cloud      │
+       │       Python 3.10+ / ASGI     │   │                          │
+       │  • /api/generate-paths        │   │  • Authentication        │
+       │  • /api/analyze-risk          │   │    (Google OAuth & Email)│
+       │  • /api/assistant             │   │  • Cloud Firestore       │
+       └───────────────┬───────────────┘   │    (Roadmaps & Sessions) │
+                       │                   └──────────────────────────┘
+           ┌───────────┴───────────┐
+           ▼                       ▼
+   ┌───────────────┐       ┌───────────────┐
+   │   Groq API    │       │ Local Ollama  │
+   │ (Llama 3.3)   │       │ (Gemma/Llama) │
+   └───────────────┘       └───────────────┘
+           │                       │
+           └───────────┬───────────┘
+                       ▼
+           ┌───────────────────────┐
+           │ Decision Knowledge    │
+           │ Bank (decision-data)  │
+           └───────────────────────┘
 ```
 
 ---
